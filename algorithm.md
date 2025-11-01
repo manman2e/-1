@@ -4,6 +4,63 @@
 
 仓库中提供了完整的 Python 管道（参见 `great_wall_depth/` 包以及 `generate_depth_maps.py` 脚本），可在 PyCharm 中直接运行。以下文档保留了详细的数学背景与实现思路，用于帮助理解与二次开发。
 
+## 代码结构速览
+
+| 模块/脚本 | 作用 | 核心接口 |
+| --- | --- | --- |
+| `generate_depth_maps.py` | 命令行入口脚本，负责解析参数、构建 `PipelineConfig` 并调用整条流水线。 | `main()` |
+| `great_wall_depth/__init__.py` | 暴露对外使用的公共 API，便于从包中导入配置和管道函数。 | `PipelineConfig`、`CameraConfig`、`run_pipeline` |
+| `great_wall_depth/config.py` | 定义相机与流水线的所有可调参数，并提供校验、序列化等工具方法。 | `CameraConfig`、`PipelineConfig.validate()`、`PipelineConfig.from_paths()` |
+| `great_wall_depth/io.py` | 处理输入/输出：读取点云或网格、保存深度图（PNG/NumPy）和 JSON 元数据。 | `load_geometry()`、`write_depth_png()` |
+| `great_wall_depth/geometry.py` | 集中实现几何基础函数，例如长轴估计、坐标系转换、折线重采样和平滑。 | `estimate_long_axis()`、`resample_polyline()` |
+| `great_wall_depth/centerline.py` | 在长轴坐标系下统计点云，生成平滑的中心线并返回本地/世界坐标。 | `compute_centerline()` |
+| `great_wall_depth/segments.py` | 将全局点云按中心线切分成带重叠的段，便于分块渲染和并行处理。 | `split_into_segments()` |
+| `great_wall_depth/cameras.py` | 基于中心线采样点和切向量生成 A 面、B 面、顶视的相机姿态。 | `generate_poses()` |
+| `great_wall_depth/depth_renderer.py` | 提供轻量级的点云投影器，实现深度图的逐像素可见性计算。 | `render_depth_map()` |
+| `great_wall_depth/pipeline.py` | 串联整套流程：加载数据、提取中心线、分段、渲染并写出结果。 | `run_pipeline()` |
+
+这些模块均为普通 Python 代码，可在 PyCharm 中逐个调试。若需要在别的项目中复用，只需安装依赖并从 `great_wall_depth` 包导入对应函数。
+
+## 快速使用指引
+
+1. **准备环境**
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Windows 请使用 .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+   依赖中最关键的是 `open3d`（负责载入点云/网格）和 `imageio`（输出 16-bit 深度 PNG）。
+
+2. **准备输入数据**
+   将无人机三维实景模型存为 `PLY/PCD/OBJ/XYZ/LAS/...` 等支持的格式。例如 `great_wall_segment.ply`。
+
+3. **运行命令行脚本**
+   ```bash
+   python generate_depth_maps.py great_wall_segment.ply outputs/
+   ```
+   常用可选参数：
+   - `--voxel 0.15`：体素下采样尺寸（米）。
+   - `--step 1.5`：沿中心线的采样间距（米）。
+   - `--chunk-length 200` / `--chunk-overlap 20`：分段长度及重叠量。
+   - `--width 1280 --height 720 --fov 75`：深度图分辨率与视场角。
+
+   程序会在输出目录下生成：
+   - `centerline_world.npy` / `centerline_local.npy`（可选，保存中间结果）；
+   - `segment_xxx/A|B|Top/sample_yyyy_depth.npy/.png`（深度图和 NumPy 原始数组）；
+   - `segment_xxx/..._meta.json`（每张深度图的相机姿态与内参）；
+   - `summary.json`（总览，记录调用配置与各文件路径）。
+
+4. **在 PyCharm 中运行**
+   - 打开仓库后，配置好 Python 解释器（推荐使用上面创建的虚拟环境）。
+   - 右键 `generate_depth_maps.py` → “Run 'generate_depth_maps'...”，在“Parameters”栏填入 `<输入路径> <输出目录> [可选参数]`。
+   - 在“Run”窗口可实时查看日志，若需调试，可在包内任意模块上打断点。
+
+5. **复用或扩展**
+   - 从别的脚本导入 `from great_wall_depth import PipelineConfig, run_pipeline`，构造配置后直接调用。
+   - 若需要替换某一步（例如中心线算法），可在保留同名函数接口的前提下自行实现，然后在 `PipelineConfig` 或 `pipeline.py` 中切换。
+
+以上流程完成后，可继续阅读下文的算法细节章节，了解每个阶段的数学与实现原理。
+
 ## 1. 输入数据与全局参数
 - `M`: 全局三维模型，采用稠密点云或三角网格表示，包含坐标 `(x, y, z)`，单位为米。
 - `G`: 已知的重力方向向量，默认取世界坐标轴 `+Z` 方向。
