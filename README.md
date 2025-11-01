@@ -31,26 +31,31 @@ Update `configs/gaofen2.yaml` with the correct paths, scale factor, and training
 ## Training
 
 ```bash
-python scripts/train.py configs/gaofen2.yaml --devices 1 --accelerator gpu
+python scripts/train.py configs/gaofen2.yaml --devices 1 --accelerator gpu \
+    --train-hr /data/gaofen2/train/HR --train-lr /data/gaofen2/train/LR \
+    --val-hr /data/gaofen2/val/HR --val-lr /data/gaofen2/val/LR
 ```
 
-This script uses PyTorch Lightning to handle checkpointing, logging, and mixed precision (configurable via the YAML file).
+CLI flags let you override dataset paths, batch size, patch size, and training epochs without editing the YAML file. This script
+uses PyTorch Lightning to handle checkpointing, logging, and mixed precision (configurable via the YAML file or CLI overrides).
 
 ## Evaluation
 
 ```bash
-python scripts/evaluate.py configs/gaofen2.yaml /path/to/checkpoint.ckpt
+python scripts/evaluate.py configs/gaofen2.yaml /path/to/checkpoint.ckpt \
+    --val-hr /data/gaofen2/val/HR --val-lr /data/gaofen2/val/LR
 ```
 
-Computes the average PSNR on the validation set.
+Computes the average PSNR on the validation set. Pass `--split train` to score the training split instead.
 
 ## Inference on Custom Imagery
 
 ```bash
-python scripts/predict.py configs/gaofen2.yaml /path/to/checkpoint.ckpt /path/to/lr/images /path/to/output --tile-size 512 --overlap 32
+python scripts/predict.py /path/to/checkpoint.ckpt /path/to/lr/images /path/to/output \
+    --config configs/gaofen2.yaml --tile-size 512 --overlap 32
 ```
 
-Large images can be processed with tiling to avoid GPU memory issues. The script saves super-resolved outputs alongside the original filenames.
+Large images can be processed with tiling to avoid GPU memory issues. The script saves super-resolved outputs alongside the original filenames. The `--config` flag is optional because checkpoints already store the training hyperparameters; supply it only when you want to override them.
 
 ## Configuration
 

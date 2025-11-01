@@ -12,7 +12,7 @@ from .datasets import ImagePairDataset, PatchConfig
 
 @dataclass
 class DataConfig:
-    train_hr: str
+    train_hr: Optional[str] = None
     train_lr: Optional[str] = None
     val_hr: Optional[str] = None
     val_lr: Optional[str] = None
@@ -67,7 +67,7 @@ class RCANDataModule(pl.LightningDataModule):
             return None
         return DataLoader(
             self.val_dataset,
-            batch_size=1,
+            batch_size=max(1, self.config.batch_size),
             shuffle=False,
             num_workers=self.config.num_workers,
             pin_memory=True,

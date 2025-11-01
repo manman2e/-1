@@ -19,6 +19,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("config", type=Path, help="Path to YAML configuration file")
     parser.add_argument("checkpoint", type=Path, help="Path to trained checkpoint")
     parser.add_argument("--split", type=str, default="val", choices=["train", "val"], help="Dataset split to evaluate")
+    parser.add_argument("--val-hr", type=Path, help="Override validation HR directory from config")
+    parser.add_argument("--val-lr", type=Path, help="Override validation LR directory from config")
+    parser.add_argument("--batch-size", type=int, help="Override validation batch size")
     return parser.parse_args()
 
 
@@ -37,9 +40,17 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module.to(device)
 
-    data_cfg = DataConfig(**cfg["data"])
+    data_dict = cfg["data"].copy()
+    if args.val_hr:
+        data_dict["val_hr"] = str(args.val_hr)
+    if args.val_lr:
+        data_dict["val_lr"] = str(args.val_lr)
+    if args.batch_size:
+        data_dict["batch_size"] = args.batch_size
+    data_cfg = DataConfig(**data_dict)
     dm = RCANDataModule(data_cfg)
-    dm.setup()
+    stage = "validate" if args.split == "val" else "fit"
+    dm.setup(stage=stage)
     dataloader = dm.val_dataloader() if args.split == "val" else dm.train_dataloader()
     if dataloader is None:
         raise RuntimeError(f"No dataloader available for split {args.split}")

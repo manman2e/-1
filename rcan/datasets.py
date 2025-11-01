@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 
 import numpy as np
 from PIL import Image
@@ -38,15 +38,11 @@ class ImagePairDataset(Dataset):
         self.patch_config = patch_config or PatchConfig()
         self.is_train = is_train
 
-        self.hr_files = sorted([p for p in self.hr_dir.glob("*.tif")])
-        if not self.hr_files:
-            self.hr_files = sorted([p for p in self.hr_dir.glob("*.png")])
+        self.hr_files = self._collect_files(self.hr_dir)
         if not self.hr_files:
             raise FileNotFoundError(f"No images found in {self.hr_dir}")
         if self.lr_dir:
-            self.lr_files = sorted([p for p in self.lr_dir.glob("*.tif")])
-            if not self.lr_files:
-                self.lr_files = sorted([p for p in self.lr_dir.glob("*.png")])
+            self.lr_files = self._collect_files(self.lr_dir)
             if len(self.hr_files) != len(self.lr_files):
                 raise ValueError("HR and LR directory must contain the same number of images")
         else:
@@ -107,6 +103,14 @@ class ImagePairDataset(Dataset):
         if self.transform:
             lr, hr = self.transform(lr, hr)
         return {"lr": lr, "hr": hr, "name": hr_path.name}
+
+    @staticmethod
+    def _collect_files(directory: Path) -> list[Path]:
+        exts = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp"}
+        if not directory.exists():
+            raise FileNotFoundError(f"Directory does not exist: {directory}")
+        files: Iterable[Path] = directory.iterdir()
+        return sorted([p for p in files if p.is_file() and p.suffix.lower() in exts])
 
 
 class SingleImageDataset(Dataset):

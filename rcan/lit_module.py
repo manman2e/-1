@@ -46,6 +46,9 @@ class RCANLightningModule(pl.LightningModule):
         psnr = self._psnr(preds.detach(), batch["hr"].detach())
         self.log("val/loss", loss, prog_bar=True)
         self.log("val/psnr", psnr, prog_bar=True)
+        # Lightning does not expose slash-separated metrics for checkpoint filename templates,
+        # so duplicate the value under a sanitized key.
+        self.log("val_psnr", psnr, prog_bar=False)
         return {"val_loss": loss, "val_psnr": psnr}
 
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int, dataloader_idx: int = 0) -> Dict[str, torch.Tensor]:

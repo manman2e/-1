@@ -17,10 +17,10 @@ from rcan.model import RCANConfig
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Super-resolve images using a trained RCAN model")
-    parser.add_argument("config", type=Path, help="Path to YAML configuration file")
     parser.add_argument("checkpoint", type=Path, help="Path to checkpoint file")
     parser.add_argument("input", type=Path, help="Directory of images or a single image file")
     parser.add_argument("output", type=Path, help="Directory to save super-resolved images")
+    parser.add_argument("--config", type=Path, help="Optional YAML config to override checkpoint hyperparameters")
     parser.add_argument("--tile-size", type=int, default=0, help="Optional tiling size for large images")
     parser.add_argument("--overlap", type=int, default=32, help="Overlap size when tiling")
     parser.add_argument("--half", action="store_true", help="Use half precision during inference")
@@ -33,11 +33,14 @@ def load_config(path: Path) -> dict:
 
 
 def iter_images(input_path: Path) -> Iterable[Path]:
+    exts = {".png", ".tif", ".tiff", ".jpg", ".jpeg", ".bmp"}
     if input_path.is_file():
-        yield input_path
+        if input_path.suffix.lower() in exts:
+            yield input_path
     else:
-        for ext in ("*.png", "*.tif", "*.tiff", "*.jpg", "*.jpeg"):
-            yield from input_path.glob(ext)
+        for path in sorted(input_path.iterdir()):
+            if path.is_file() and path.suffix.lower() in exts:
+                yield path
 
 
 def tile_image(image: torch.Tensor, tile_size: int, overlap: int) -> list[tuple[torch.Tensor, tuple[int, int], tuple[int, int]]]:
@@ -74,10 +77,12 @@ def save_image(tensor: torch.Tensor, path: Path) -> None:
 
 def main() -> None:
     args = parse_args()
-    cfg = load_config(args.config)
-    model_cfg = RCANConfig(**cfg["model"])
-
-    module = RCANLightningModule.load_from_checkpoint(args.checkpoint, config=model_cfg)
+    if args.config:
+        cfg = load_config(args.config)
+        model_cfg = RCANConfig(**cfg["model"])
+        module = RCANLightningModule.load_from_checkpoint(args.checkpoint, config=model_cfg)
+    else:
+        module = RCANLightningModule.load_from_checkpoint(args.checkpoint)
     module.eval()
     module.freeze()
 
