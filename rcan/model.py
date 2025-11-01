@@ -2,6 +2,8 @@
 
 The architecture is adapted from lornatang's public RCAN implementation but
 restructured into modular building blocks suitable for Lightning training.
+This variant adds configuration hooks so multi-spectral imagery (e.g. Gaofen-2
+with RGB+NIR bands) can be trained without hand editing the model definition.
 """
 from __future__ import annotations
 
@@ -15,21 +17,38 @@ from torch import nn
 @dataclass
 class RCANConfig:
     scale: int = 4
-    n_colors: int = 3
+    n_colors: int = 4
     n_feats: int = 64
     n_resgroups: int = 10
     n_resblocks: int = 20
     reduction: int = 16
+    rgb_range: float = 1.0
+    channel_mean: tuple[float, ...] = ()
+    channel_std: tuple[float, ...] = ()
 
 
 class MeanShift(nn.Conv2d):
-    """Normalize RGB images by subtracting/adding mean shift."""
+    """Normalize images by subtracting/adding a per-channel mean shift."""
 
-    def __init__(self, rgb_range: float = 255, rgb_mean=(0.4488, 0.4371, 0.4040), rgb_std=(1.0, 1.0, 1.0), sign: int = -1):
-        super().__init__(3, 3, kernel_size=1)
-        std = torch.Tensor(rgb_std)
-        self.weight.data = torch.eye(3).view(3, 3, 1, 1) / std.view(3, 1, 1, 1)
-        self.bias.data = sign * rgb_range * torch.Tensor(rgb_mean) / std
+    def __init__(
+        self,
+        n_channels: int,
+        rgb_range: float = 1.0,
+        channel_mean: tuple[float, ...] | list[float] | None = None,
+        channel_std: tuple[float, ...] | list[float] | None = None,
+        sign: int = -1,
+    ) -> None:
+        super().__init__(n_channels, n_channels, kernel_size=1)
+        if channel_mean is None:
+            channel_mean = [0.0] * n_channels
+        if channel_std is None:
+            channel_std = [1.0] * n_channels
+        if len(channel_mean) != n_channels or len(channel_std) != n_channels:
+            raise ValueError("channel_mean and channel_std must match n_channels")
+        std = torch.tensor(channel_std, dtype=torch.float32)
+        weight = torch.eye(n_channels).view(n_channels, n_channels, 1, 1)
+        self.weight.data = weight / std.view(n_channels, 1, 1, 1)
+        self.bias.data = sign * rgb_range * torch.tensor(channel_mean, dtype=torch.float32) / std
         for p in self.parameters():
             p.requires_grad = False
 
@@ -98,8 +117,22 @@ class RCAN(nn.Module):
     def __init__(self, config: RCANConfig):
         super().__init__()
         self.config = config
-        self.sub_mean = MeanShift()
-        self.add_mean = MeanShift(sign=1)
+        channel_mean = config.channel_mean or (0.0,) * config.n_colors
+        channel_std = config.channel_std or (1.0,) * config.n_colors
+        self.sub_mean = MeanShift(
+            config.n_colors,
+            rgb_range=config.rgb_range,
+            channel_mean=channel_mean,
+            channel_std=channel_std,
+            sign=-1,
+        )
+        self.add_mean = MeanShift(
+            config.n_colors,
+            rgb_range=config.rgb_range,
+            channel_mean=channel_mean,
+            channel_std=channel_std,
+            sign=1,
+        )
 
         self.head = nn.Conv2d(config.n_colors, config.n_feats, kernel_size=3, padding=1)
         self.body = nn.Sequential(

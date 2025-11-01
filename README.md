@@ -1,6 +1,6 @@
 # RCAN for Gaofen-2 Super-Resolution
 
-This repository adapts [lornatang's RCAN implementation](https://github.com/lornatang/RCAN-PyTorch) and adds end-to-end tooling to train, evaluate, and deploy a Residual Channel Attention Network on Gaofen-2 satellite imagery.
+This repository adapts [lornatang's RCAN implementation](https://github.com/lornatang/RCAN-PyTorch) and adds end-to-end tooling to train, evaluate, and deploy a Residual Channel Attention Network on Gaofen-2 satellite imagery. The pipeline now reads four-band RGB+NIR GeoTIFF tiles (and other multi-band rasters), letting the model consume the full spectral stack without manual preprocessing.
 
 ## Setup
 
@@ -12,7 +12,7 @@ pip install -r requirements.txt
 
 ## Prepare Data
 
-Organize your Gaofen-2 dataset as paired low-resolution (LR) and high-resolution (HR) tiles:
+Organize your Gaofen-2 dataset as paired low-resolution (LR) and high-resolution (HR) tiles. Each tile should contain the four Gaofen-2 bands (R, G, B, and NIR) stored in `.tif`/`.tiff` containers or another raster format that exposes at least four channels:
 
 ```
 /path/to/dataset/
@@ -24,9 +24,9 @@ Organize your Gaofen-2 dataset as paired low-resolution (LR) and high-resolution
     LR/
 ```
 
-If LR images are missing, the dataloader can downsample HR images on the fly using bicubic interpolation.
+If LR images are missing, the dataloader can downsample HR images on the fly using bicubic interpolation while preserving all spectral channels.
 
-Update `configs/gaofen2.yaml` with the correct paths, scale factor, and training hyperparameters.
+Update `configs/gaofen2.yaml` with the correct paths, scale factor, number of channels (defaults to 4), and training hyperparameters.
 
 ## Training
 
@@ -55,7 +55,7 @@ python scripts/predict.py /path/to/checkpoint.ckpt /path/to/lr/images /path/to/o
     --config configs/gaofen2.yaml --tile-size 512 --overlap 32
 ```
 
-Large images can be processed with tiling to avoid GPU memory issues. The script saves super-resolved outputs alongside the original filenames. The `--config` flag is optional because checkpoints already store the training hyperparameters; supply it only when you want to override them.
+Large images can be processed with tiling to avoid GPU memory issues. GeoTIFF metadata such as channel count and data type are preserved when saving predictions so RGB+NIR products can be ingested directly into downstream pipelines. The `--config` flag is optional because checkpoints already store the training hyperparameters; supply it only when you want to override them.
 
 ## Configuration
 

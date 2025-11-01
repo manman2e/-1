@@ -4,3 +4,4 @@ torch
 pytorch-lightning
 tqdm
 pyyaml
+tifffile

@@ -48,6 +48,10 @@ def main() -> None:
     if args.batch_size:
         data_dict["batch_size"] = args.batch_size
     data_cfg = DataConfig(**data_dict)
+    if model_cfg.n_colors != data_cfg.num_channels:
+        raise ValueError(
+            f"Model expects {model_cfg.n_colors} channels but datamodule is configured for {data_cfg.num_channels}"
+        )
     dm = RCANDataModule(data_cfg)
     stage = "validate" if args.split == "val" else "fit"
     dm.setup(stage=stage)

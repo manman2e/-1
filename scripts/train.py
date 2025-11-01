@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, help="Override batch size")
     parser.add_argument("--num-workers", type=int, help="Override dataloader worker count")
     parser.add_argument("--patch-size", type=int, help="Override training patch size")
+    parser.add_argument("--num-channels", type=int, help="Override number of spectral channels")
     parser.add_argument("--max-epochs", type=int, help="Override max epochs from config")
     parser.add_argument("--precision", type=int, help="Override precision from config")
     return parser.parse_args()
@@ -59,7 +60,14 @@ def main() -> None:
         data_dict["num_workers"] = args.num_workers
     if args.patch_size:
         data_dict["patch_size"] = args.patch_size
+    if args.num_channels:
+        data_dict["num_channels"] = args.num_channels
     data_cfg = DataConfig(**data_dict)
+
+    if model_cfg.n_colors != data_cfg.num_channels:
+        raise ValueError(
+            f"Model expects {model_cfg.n_colors} channels but datamodule is configured for {data_cfg.num_channels}"
+        )
 
     module = RCANLightningModule(model_cfg, optim_config=optim_cfg)
     datamodule = RCANDataModule(data_cfg)

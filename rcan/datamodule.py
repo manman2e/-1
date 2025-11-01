@@ -21,6 +21,7 @@ class DataConfig:
     num_workers: int = 4
     patch_size: int = 128
     augment: bool = True
+    num_channels: int = 4
 
 
 class RCANDataModule(pl.LightningDataModule):
@@ -41,6 +42,7 @@ class RCANDataModule(pl.LightningDataModule):
                 scale=self.config.scale,
                 patch_config=patch,
                 is_train=True,
+                num_channels=self.config.num_channels,
             )
         if stage in (None, "fit", "validate") and self.config.val_hr:
             self.val_dataset = ImagePairDataset(
@@ -49,6 +51,7 @@ class RCANDataModule(pl.LightningDataModule):
                 scale=self.config.scale,
                 patch_config=PatchConfig(patch_size=self.config.patch_size, augment=False),
                 is_train=False,
+                num_channels=self.config.num_channels,
             )
 
     def train_dataloader(self) -> DataLoader:
