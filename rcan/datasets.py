@@ -6,57 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Sequence
 
-import numpy as np
-from PIL import Image
-import tifffile
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+from .io import read_image
 
 @dataclass
 class PatchConfig:
     patch_size: int = 128
     augment: bool = True
-
-
-def _read_image(path: Path) -> tuple[torch.Tensor, dict[str, object]]:
-    """Load an image into a normalized tensor along with metadata."""
-
-    suffix = path.suffix.lower()
-    if suffix in {".tif", ".tiff"}:
-        array = tifffile.imread(path)
-    else:
-        image = Image.open(path)
-        array = np.asarray(image)
-    if array.ndim == 2:
-        array = array[..., None]
-    elif array.ndim == 3 and array.shape[0] <= 8 and array.shape[0] < array.shape[-1]:
-        # Typical GeoTIFF layout is (bands, height, width).
-        array = np.transpose(array, (1, 2, 0))
-    if array.ndim != 3:
-        raise ValueError(f"Unsupported image shape {array.shape} for {path}")
-
-    orig_dtype = np.dtype(array.dtype)
-    if np.issubdtype(orig_dtype, np.integer):
-        scale = float(np.iinfo(orig_dtype).max)
-        array = array.astype(np.float32) / scale
-        dtype_kind = "i"
-    else:
-        scale = 1.0
-        array = array.astype(np.float32)
-        dtype_kind = "f"
-
-    tensor = torch.from_numpy(array).permute(2, 0, 1)
-    meta: dict[str, object] = {
-        "dtype": orig_dtype.str,
-        "dtype_kind": dtype_kind,
-        "scale": scale,
-        "channels": tensor.shape[0],
-        "height": tensor.shape[1],
-        "width": tensor.shape[2],
-    }
-    return tensor, meta
 
 
 class ImagePairDataset(Dataset):
@@ -95,7 +54,7 @@ class ImagePairDataset(Dataset):
 
     @staticmethod
     def _load(path: Path) -> torch.Tensor:
-        tensor, _ = _read_image(path)
+        tensor, _ = read_image(path)
         return tensor
 
     def _random_crop(self, hr: torch.Tensor, lr: Optional[torch.Tensor]) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -173,7 +132,7 @@ class SingleImageDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         path = self.image_paths[idx]
-        tensor, meta = _read_image(path)
+        tensor, meta = read_image(path)
         if self.num_channels is not None and tensor.shape[0] != self.num_channels:
             raise ValueError(
                 f"Image {path} has {tensor.shape[0]} channels but model expects {self.num_channels}"

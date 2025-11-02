@@ -7,12 +7,10 @@ from typing import Iterable
 
 import yaml
 import torch
-import numpy as np
 from tqdm import tqdm
-from PIL import Image
-import tifffile
 
 from rcan.datasets import SingleImageDataset
+from rcan.io import write_image
 from rcan.lit_module import RCANLightningModule
 from rcan.model import RCANConfig
 
@@ -71,38 +69,6 @@ def merge_tiles(tiles: list[tuple[torch.Tensor, tuple[int, int], tuple[int, int]
     return sr
 
 
-def save_image(tensor: torch.Tensor, path: Path, meta: dict[str, object] | None = None) -> None:
-    array = tensor.clamp(0.0, 1.0).cpu().numpy()
-    array = np.transpose(array, (1, 2, 0))
-
-    suffix = path.suffix.lower()
-    if meta:
-        dtype = np.dtype(meta.get("dtype", "float32"))
-        scale = float(meta.get("scale", 1.0))
-        dtype_kind = meta.get("dtype_kind", "f")
-    else:
-        dtype = np.uint8
-        scale = 255.0
-        dtype_kind = "i"
-
-    if dtype_kind == "i":
-        array = np.round(array * scale).clip(0, scale)
-        array = array.astype(dtype)
-    else:
-        array = array.astype(dtype)
-
-    if array.shape[2] == 1:
-        array = array[:, :, 0]
-
-    if suffix in {".tif", ".tiff"} or (meta and meta.get("channels", 1) > 3):
-        tifffile.imwrite(str(path), array)
-    else:
-        if array.dtype != np.uint8:
-            array = np.clip(array, 0, 255).astype(np.uint8)
-        image = Image.fromarray(array)
-        image.save(path)
-
-
 def main() -> None:
     args = parse_args()
     if args.config:
@@ -142,7 +108,7 @@ def main() -> None:
             sr = merge_tiles(sr_tiles, lr.squeeze(0).shape, module.model.config.scale)
         else:
             sr = module.model(lr).squeeze(0)
-        save_image(sr, output_dir / sample["name"], meta=sample.get("meta"))
+        write_image(sr, output_dir / sample["name"], meta=sample.get("meta"))
 
 
 if __name__ == "__main__":

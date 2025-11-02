@@ -24,7 +24,13 @@ Organize your Gaofen-2 dataset as paired low-resolution (LR) and high-resolution
     LR/
 ```
 
-If LR images are missing, the dataloader can downsample HR images on the fly using bicubic interpolation while preserving all spectral channels.
+If LR images are missing, the dataloader can downsample HR images on the fly using bicubic interpolation while preserving all spectral channels. You can also pre-generate an LR folder from your HR Gaofen-2 tiles with:
+
+```bash
+python scripts/generate_lr.py /data/gaofen2/train/HR /data/gaofen2/train/LR --scale 4
+```
+
+The script keeps all four spectral bands intact, handles GeoTIFF metadata, and defaults to bicubic interpolation. Pass `--suffix _LR` if you prefer to append a suffix to each filename instead of mirroring the HR names.
 
 Update `configs/gaofen2.yaml` with the correct paths, scale factor, number of channels (defaults to 4), and training hyperparameters.
 
