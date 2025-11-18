@@ -59,6 +59,19 @@
    - 从别的脚本导入 `from great_wall_depth import PipelineConfig, run_pipeline`，构造配置后直接调用。
    - 若需要替换某一步（例如中心线算法），可在保留同名函数接口的前提下自行实现，然后在 `PipelineConfig` 或 `pipeline.py` 中切换。
 
+6. **合并输出为完整 A/B/Top 深度图**
+   - 管道会在 `segment_xxx/A|B|Top/` 中保存沿中心线每个采样点的深度图切片。若希望得到“整段长城”的三张长条深度图，可使用仓库新增的 `combine_depth_maps.py` 脚本：
+     ```bash
+     python combine_depth_maps.py outputs/ merged_depths/ \
+         --poses A B Top --axis horizontal --save-npy
+     ```
+   - 其中 `outputs/` 为原始流水线的输出目录，`merged_depths/` 是希望存放合成结果的新目录。
+   - `--axis` 控制拼接方向（`horizontal` 表示把所有切片在水平方向排成一张很宽的图，`vertical` 则按行堆叠），`--poses` 可选择只合并某几个视角，`--save-npy` 会额外输出 NumPy 格式以便后续数值处理。
+   - 脚本会读取 `summary.json`，按 `segment_index` 与 `sample_index` 自动排序所有切片，并生成：
+     1. `combined_<pose>.png`：与单帧相同的 16-bit 深度图，只是尺寸更大；
+     2. （可选）`combined_<pose>.npy`：合成后的浮点深度矩阵；
+     3. `combined_<pose>_sources.json`：记录每个像素块对应的原始切片，方便溯源。
+
 以上流程完成后，可继续阅读下文的算法细节章节，了解每个阶段的数学与实现原理。
 
 ## 1. 输入数据与全局参数
